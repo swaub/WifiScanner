@@ -51,9 +51,7 @@ extern int ScanWiFiNetworks(WiFiNetworkList* list);
 extern void CleanupWiFiScanner(void);
 extern void CleanupNetworkList(WiFiNetworkList* list);
 
-extern void DrawSignalGraph(HDC hdc, RECT rect, WiFiNetworkList* networks);
-extern void DrawModernButton(HDC hdc, RECT rect, const char* text, BOOL pressed, BOOL enabled);
-extern void ApplyModernStyling(HWND hwnd);
+extern void DrawSignalGraph(HDC hdc, RECT rect, WiFiNetworkList* networks);extern void DrawModernButton(HDC hdc, RECT rect, const char* text, BOOL pressed, BOOL enabled);extern void ApplyModernStyling(HWND hwnd);extern void CleanupGUICache(void);
 
 HWND g_hMainWindow = NULL;
 HWND g_hTreeView = NULL;
@@ -119,7 +117,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     ShowWindow(g_hMainWindow, nCmdShow);
     UpdateWindow(g_hMainWindow);
     
-    SetTimer(g_hMainWindow, ID_TIMER, 3000, NULL);
+    SetTimer(g_hMainWindow, ID_TIMER, 8000, NULL);
     RefreshNetworks();
     
     MSG msg = {0};
@@ -128,12 +126,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
         DispatchMessage(&msg);
     }
     
-    KillTimer(g_hMainWindow, ID_TIMER);
-    CleanupNetworkList(&g_NetworkList);
-    CleanupWiFiScanner();
-    
-    if (g_hFont) DeleteObject(g_hFont);
-    if (g_hBackgroundBrush) DeleteObject(g_hBackgroundBrush);
+        KillTimer(g_hMainWindow, ID_TIMER);    CleanupNetworkList(&g_NetworkList);    CleanupWiFiScanner();    CleanupGUICache();        if (g_hFont) DeleteObject(g_hFont);    if (g_hBackgroundBrush) DeleteObject(g_hBackgroundBrush);
     
     return (int)msg.wParam;
 }

@@ -38,7 +38,18 @@ void InitializeWiFiScanner(void) {
         return;
     }
     
-        dwResult = WlanEnumInterfaces(g_hWlanClient, NULL, &g_pInterfaceList);    if (dwResult != ERROR_SUCCESS || g_pInterfaceList->dwNumberOfItems == 0) {        if (g_pInterfaceList != NULL) {            WlanFreeMemory(g_pInterfaceList);            g_pInterfaceList = NULL;        }        if (g_hWlanClient != NULL) {            WlanCloseHandle(g_hWlanClient, NULL);            g_hWlanClient = NULL;        }        return;    }
+    dwResult = WlanEnumInterfaces(g_hWlanClient, NULL, &g_pInterfaceList);
+    if (dwResult != ERROR_SUCCESS || g_pInterfaceList->dwNumberOfItems == 0) {
+        if (g_pInterfaceList != NULL) {
+            WlanFreeMemory(g_pInterfaceList);
+            g_pInterfaceList = NULL;
+        }
+        if (g_hWlanClient != NULL) {
+            WlanCloseHandle(g_hWlanClient, NULL);
+            g_hWlanClient = NULL;
+        }
+        return;
+    }
     
     for (DWORD i = 0; i < g_pInterfaceList->dwNumberOfItems; i++) {
         if (g_pInterfaceList->InterfaceInfo[i].isState == wlan_interface_state_connected ||
@@ -156,6 +167,68 @@ static BOOL IsNetworkConnected(const GUID* interfaceGuid, const DOT11_SSID* ssid
     return isConnected;
 }
 
+static void ProcessSecurityInfo(WiFiNetwork* network, WLAN_BSS_ENTRY* pBssEntry) {
+    BOOL foundSecurity = FALSE;
+    
+    if (pBssEntry->ulIeSize > 0 && pBssEntry->ulIeOffset > 0) {
+        PBYTE pIeData = (PBYTE)pBssEntry + pBssEntry->ulIeOffset;
+        DWORD ieOffset = 0;
+        
+        while (ieOffset + 2 < pBssEntry->ulIeSize) {
+            BYTE elementId = pIeData[ieOffset];
+            BYTE length = pIeData[ieOffset + 1];
+            
+            if (ieOffset + 2 + length > pBssEntry->ulIeSize) break;
+            
+            if (elementId == 48 && length >= 4) {
+                strcpy_s(network->security, sizeof(network->security), "WPA2 Personal");
+                foundSecurity = TRUE;
+                break;
+            } else if (elementId == 221 && length >= 8) {
+                PBYTE vendorIe = &pIeData[ieOffset + 2];
+                if (vendorIe[0] == 0x00 && vendorIe[1] == 0x50 && vendorIe[2] == 0xF2 && vendorIe[3] == 0x01) {
+                    strcpy_s(network->security, sizeof(network->security), "WPA Personal");
+                    foundSecurity = TRUE;
+                    break;
+                }
+            }
+            
+            ieOffset += 2 + length;
+            if (ieOffset >= pBssEntry->ulIeSize) break;
+        }
+    }
+    
+    if (!foundSecurity) {
+        if (pBssEntry->usCapabilityInformation & 0x0010) {
+            strcpy_s(network->security, sizeof(network->security), "WEP");
+        } else {
+            strcpy_s(network->security, sizeof(network->security), "Open");
+        }
+    }
+}
+
+static BOOL AddOrUpdateNetwork(WiFiNetworkList* list, const WiFiNetwork* network) {
+    for (int i = 0; i < list->count; i++) {
+        BOOL isMatch = FALSE;
+        
+        if (strlen(network->ssid) > 0 && strlen(list->networks[i].ssid) > 0) {
+            isMatch = (strcmp(list->networks[i].ssid, network->ssid) == 0);
+        } else if (strlen(network->ssid) == 0 && strlen(list->networks[i].ssid) == 0) {
+            isMatch = (strcmp(list->networks[i].bssid, network->bssid) == 0);
+        }
+        
+        if (isMatch) {
+            if (network->signal_strength > list->networks[i].signal_strength) {
+                list->networks[i] = *network;
+            }
+            return TRUE;
+        }
+    }
+    
+    AddNetworkToList(list, network);
+    return TRUE;
+}
+
 int ScanWiFiNetworks(WiFiNetworkList* list) {
     if (!g_hWlanClient || !list) {
         return -1;
@@ -168,11 +241,28 @@ int ScanWiFiNetworks(WiFiNetworkList* list) {
         return -1;
     }
     
-    Sleep(2000);
-    
     PWLAN_BSS_LIST pBssList = NULL;
-    dwResult = WlanGetNetworkBssList(g_hWlanClient, &g_interfaceGuid,
-                                    NULL, dot11_BSS_type_any, FALSE, NULL, &pBssList);
+    for (int attempts = 0; attempts < 10; attempts++) {
+        Sleep(200);
+        
+        dwResult = WlanGetNetworkBssList(g_hWlanClient, &g_interfaceGuid,
+                                        NULL, dot11_BSS_type_any, FALSE, NULL, &pBssList);
+        
+        if (dwResult == ERROR_SUCCESS && pBssList && pBssList->dwNumberOfItems > 0) {
+            break;
+        }
+        
+        if (pBssList) {
+            WlanFreeMemory(pBssList);
+            pBssList = NULL;
+        }
+        
+        MSG msg;
+        while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+    }
     
     if (dwResult != ERROR_SUCCESS || !pBssList) {
         return -1;
@@ -200,44 +290,10 @@ int ScanWiFiNetworks(WiFiNetworkList* list) {
         network.frequency = pBssEntry->ulChCenterFrequency / 1000;
         network.channel = GetChannelFromFrequency(network.frequency);
         
-        BOOL foundSecurity = FALSE;
-        PWLAN_PROFILE_INFO_LIST pProfileList = NULL;
-        dwResult = WlanGetProfileList(g_hWlanClient, &g_interfaceGuid, NULL, &pProfileList);
-        
-        if (dwResult == ERROR_SUCCESS && pProfileList) {
-            for (DWORD j = 0; j < pProfileList->dwNumberOfItems; j++) {
-                LPWSTR pProfileXml = NULL;
-                DWORD dwFlags = WLAN_PROFILE_GET_PLAINTEXT_KEY;
-                DWORD dwGrantedAccess = 0;
-                
-                dwResult = WlanGetProfile(g_hWlanClient, &g_interfaceGuid,
-                                        pProfileList->ProfileInfo[j].strProfileName,
-                                        NULL, &pProfileXml, &dwFlags, &dwGrantedAccess);
-                
-                if (dwResult == ERROR_SUCCESS && pProfileXml) {
-                    WlanFreeMemory(pProfileXml);
-                }
-            }
-            WlanFreeMemory(pProfileList);
-        }
-        
-                if (!foundSecurity) {            if (pBssEntry->usCapabilityInformation & 0x0010) {                strcpy_s(network.security, sizeof(network.security), "WEP");            } else {                strcpy_s(network.security, sizeof(network.security), "Open");            }        }
-        
-        
-        
-                if (pBssEntry->ulIeSize > 0 && pBssEntry->ulIeOffset > 0) {            PBYTE pIeData = (PBYTE)pBssEntry + pBssEntry->ulIeOffset;            DWORD ieOffset = 0;                        while (ieOffset + 2 < pBssEntry->ulIeSize) {                BYTE elementId = pIeData[ieOffset];                BYTE length = pIeData[ieOffset + 1];                                if (ieOffset + 2 + length > pBssEntry->ulIeSize) break;                                if (elementId == 48 && length >= 4) {                    strcpy_s(network.security, sizeof(network.security), "WPA2 Personal");                    foundSecurity = TRUE;                } else if (elementId == 221 && length >= 8) {                    PBYTE vendorIe = &pIeData[ieOffset + 2];                    if (vendorIe[0] == 0x00 && vendorIe[1] == 0x50 && vendorIe[2] == 0xF2 && vendorIe[3] == 0x01) {                        strcpy_s(network.security, sizeof(network.security), "WPA Personal");                        foundSecurity = TRUE;                    }                }                                ieOffset += 2 + length;                if (ieOffset >= pBssEntry->ulIeSize) break;            }        }
-        
-        if (strlen(network.security) == 0) {
-            if (pBssEntry->usCapabilityInformation & 0x0010) {
-                strcpy_s(network.security, sizeof(network.security), "WEP");
-            } else {
-                strcpy_s(network.security, sizeof(network.security), "Open");
-            }
-        }
-        
+        ProcessSecurityInfo(&network, pBssEntry);
         network.is_connected = IsNetworkConnected(&g_interfaceGuid, &pBssEntry->dot11Ssid);
         
-                BOOL isDuplicate = FALSE;        int existingIndex = -1;                for (int j = 0; j < list->count; j++) {            if (strlen(network.ssid) > 0 && strlen(list->networks[j].ssid) > 0 &&                 strcmp(list->networks[j].ssid, network.ssid) == 0) {                isDuplicate = TRUE;                existingIndex = j;                break;            } else if (strlen(network.ssid) == 0 && strlen(list->networks[j].ssid) == 0 &&                        strcmp(list->networks[j].bssid, network.bssid) == 0) {                isDuplicate = TRUE;                existingIndex = j;                break;            }        }                if (isDuplicate && existingIndex >= 0) {            if (network.signal_strength > list->networks[existingIndex].signal_strength) {                list->networks[existingIndex] = network;            }        } else if (!isDuplicate) {            AddNetworkToList(list, &network);        }
+        AddOrUpdateNetwork(list, &network);
     }
     
     if (pBssList) {
