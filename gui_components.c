@@ -1,8 +1,4 @@
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#include <commctrl.h>
-#include <stdio.h>
-#include <math.h>
+#define WIN32_LEAN_AND_MEAN#include <windows.h>#include <commctrl.h>#include <stdio.h>#include <math.h>#include "colors.h"
 
 #pragma comment(lib, "msimg32.lib")
 #pragma comment(lib, "gdi32.lib")
@@ -23,32 +19,82 @@ typedef struct {
     int capacity;
 } WiFiNetworkList;
 
+
+
 // Function declarations
 static void InitializeGUICache(void);
 void CleanupGUICache(void);
-static HBRUSH CreateOptimizedGradientBrush(HDC hdc, RECT rect, COLORREF color1, COLORREF color2, BOOL vertical);
-static void DrawRoundedRect(HDC hdc, RECT rect, int radius, HBRUSH hBrush, HPEN hPen);
+static HBRUSH CreateModernGradient(HDC hdc, RECT rect, COLORREF color1, COLORREF color2, BOOL vertical);
+static void DrawModernCard(HDC hdc, RECT rect, COLORREF backgroundColor, int cornerRadius);
+static void DrawGlowEffect(HDC hdc, RECT rect, COLORREF glowColor, int intensity);
 static COLORREF BlendColors(COLORREF color1, COLORREF color2, float ratio);
 
-// Cache for frequently used resources
-static HBRUSH g_cachedGradientBrush = NULL;
-static HFONT g_cachedFont = NULL;
-static HPEN g_cachedPen = NULL;
+// Enhanced resource cache
+static HBRUSH g_cachedBrushes[10] = {0};
+static HFONT g_cachedFonts[5] = {0};
+static HPEN g_cachedPens[5] = {0};
 
 static void InitializeGUICache(void) {
-    if (!g_cachedFont) {
-        g_cachedFont = CreateFontA(12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+    // Create modern font family with proper sizes
+    g_cachedFonts[0] = CreateFontA(24, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                                  DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                                 CLEARTYPE_QUALITY, VARIABLE_PITCH, "Segoe UI");
+                                 CLEARTYPE_QUALITY, VARIABLE_PITCH, "Segoe UI");  // Title
+    
+    g_cachedFonts[1] = CreateFontA(16, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+                                 DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                                 CLEARTYPE_QUALITY, VARIABLE_PITCH, "Segoe UI");  // Headers
+    
+    g_cachedFonts[2] = CreateFontA(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                 DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                                 CLEARTYPE_QUALITY, VARIABLE_PITCH, "Segoe UI");  // Body
+    
+    g_cachedFonts[3] = CreateFontA(12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                 DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                                 CLEARTYPE_QUALITY, VARIABLE_PITCH, "Segoe UI");  // Small
+    
+    g_cachedFonts[4] = CreateFontA(18, 0, 0, 0, FW_MEDIUM, FALSE, FALSE, FALSE,
+                                 DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                                 CLEARTYPE_QUALITY, VARIABLE_PITCH, "Segoe UI");  // Button
+    
+        // Create modern brushes    g_cachedBrushes[0] = CreateSolidBrush(APP_COLOR_BACKGROUND);
+    g_cachedBrushes[1] = CreateSolidBrush(COLOR_PANEL);
+    g_cachedBrushes[2] = CreateSolidBrush(COLOR_ACCENT);
+    g_cachedBrushes[3] = CreateSolidBrush(COLOR_SUCCESS);
+    g_cachedBrushes[4] = CreateSolidBrush(COLOR_WARNING);
+    g_cachedBrushes[5] = CreateSolidBrush(COLOR_ERROR);
+    
+    // Create modern pens
+    g_cachedPens[0] = CreatePen(PS_SOLID, 1, COLOR_BORDER);
+    g_cachedPens[1] = CreatePen(PS_SOLID, 2, COLOR_ACCENT);
+    g_cachedPens[2] = CreatePen(PS_SOLID, 1, COLOR_SUCCESS);
+    g_cachedPens[3] = CreatePen(PS_SOLID, 1, COLOR_WARNING);
+    g_cachedPens[4] = CreatePen(PS_SOLID, 1, COLOR_ERROR);
+}
+
+void CleanupGUICache(void) {
+    for (int i = 0; i < 5; i++) {
+        if (g_cachedFonts[i]) {
+            DeleteObject(g_cachedFonts[i]);
+            g_cachedFonts[i] = NULL;
+        }
     }
-    if (!g_cachedPen) {
-        g_cachedPen = CreatePen(PS_SOLID, 1, RGB(80, 80, 80));
+    
+    for (int i = 0; i < 10; i++) {
+        if (g_cachedBrushes[i]) {
+            DeleteObject(g_cachedBrushes[i]);
+            g_cachedBrushes[i] = NULL;
+        }
+    }
+    
+    for (int i = 0; i < 5; i++) {
+        if (g_cachedPens[i]) {
+            DeleteObject(g_cachedPens[i]);
+            g_cachedPens[i] = NULL;
+        }
     }
 }
 
-void CleanupGUICache(void) {    if (g_cachedGradientBrush) {        DeleteObject(g_cachedGradientBrush);        g_cachedGradientBrush = NULL;    }    if (g_cachedFont) {        DeleteObject(g_cachedFont);        g_cachedFont = NULL;    }    if (g_cachedPen) {        DeleteObject(g_cachedPen);        g_cachedPen = NULL;    }}
-
-static HBRUSH CreateOptimizedGradientBrush(HDC hdc, RECT rect, COLORREF color1, COLORREF color2, BOOL vertical) {
+static HBRUSH CreateModernGradient(HDC hdc, RECT rect, COLORREF color1, COLORREF color2, BOOL vertical) {
     int width = rect.right - rect.left;
     int height = rect.bottom - rect.top;
     
@@ -94,14 +140,20 @@ static HBRUSH CreateOptimizedGradientBrush(HDC hdc, RECT rect, COLORREF color1, 
     return hBrush;
 }
 
-static void DrawRoundedRect(HDC hdc, RECT rect, int radius, HBRUSH hBrush, HPEN hPen) {
+static void DrawModernCard(HDC hdc, RECT rect, COLORREF backgroundColor, int cornerRadius) {
+    HBRUSH hBrush = CreateSolidBrush(backgroundColor);
+    HPEN hPen = CreatePen(PS_SOLID, 1, COLOR_BORDER);
+    
     HPEN hOldPen = SelectObject(hdc, hPen);
     HBRUSH hOldBrush = SelectObject(hdc, hBrush);
     
-    RoundRect(hdc, rect.left, rect.top, rect.right, rect.bottom, radius, radius);
+    RoundRect(hdc, rect.left, rect.top, rect.right, rect.bottom, cornerRadius, cornerRadius);
     
     SelectObject(hdc, hOldBrush);
     SelectObject(hdc, hOldPen);
+    
+    DeleteObject(hBrush);
+    DeleteObject(hPen);
 }
 
 static COLORREF BlendColors(COLORREF color1, COLORREF color2, float ratio) {
@@ -116,55 +168,50 @@ static COLORREF BlendColors(COLORREF color1, COLORREF color2, float ratio) {
 }
 
 void DrawSignalGraph(HDC hdc, RECT rect, WiFiNetworkList* networks) {
-    int margin = 25;
-    int titleHeight = 45;
-    int legendHeight = 35;
-    
     InitializeGUICache();
-    HBRUSH hBackBrush = CreateOptimizedGradientBrush(hdc, rect, RGB(18, 20, 24), RGB(28, 32, 38), TRUE);
+    
+        // Modern dark background with subtle gradient    HBRUSH hBackBrush = CreateModernGradient(hdc, rect, APP_COLOR_BACKGROUND, COLOR_PANEL, TRUE);
     FillRect(hdc, &rect, hBackBrush);
     DeleteObject(hBackBrush);
     
-    HPEN hBorderPen = CreatePen(PS_SOLID, 1, RGB(65, 70, 80));
-    HPEN hOldPen = SelectObject(hdc, hBorderPen);
-    HBRUSH hOldBrush = SelectObject(hdc, GetStockObject(NULL_BRUSH));
-    RoundRect(hdc, rect.left, rect.top, rect.right, rect.bottom, 12, 12);
-    SelectObject(hdc, hOldBrush);
-    SelectObject(hdc, hOldPen);
-    DeleteObject(hBorderPen);
+    // Modern card-style border
+    DrawModernCard(hdc, rect, COLOR_PANEL, 16);
     
-    HFONT hTitleFont = CreateFontA(20, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                                  DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                                  CLEARTYPE_QUALITY, VARIABLE_PITCH, "Segoe UI");
-    HFONT hOldFont = SelectObject(hdc, hTitleFont);
+    // Enhanced spacing and layout
+    int margin = 32;
+    int titleHeight = 60;
+    int legendHeight = 50;
     
-    SetTextColor(hdc, RGB(240, 245, 250));
+    // Beautiful title with large text
+    HFONT hOldFont = SelectObject(hdc, g_cachedFonts[0]); // 24px bold
+    SetTextColor(hdc, COLOR_TEXT_PRIMARY);
     SetBkMode(hdc, TRANSPARENT);
     
-    RECT titleRect = {rect.left + margin, rect.top + 15, rect.right - margin, rect.top + titleHeight};
-    DrawTextA(hdc, "📊 Network Signal Analysis", -1, &titleRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    RECT titleRect = {rect.left + margin, rect.top + 20, rect.right - margin, rect.top + titleHeight};
+    DrawTextA(hdc, "📊 Network Signal Analyzer", -1, &titleRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     
-    SelectObject(hdc, hOldFont);
-    DeleteObject(hTitleFont);
+    // Modern accent line under title
+    HPEN hAccentPen = CreatePen(PS_SOLID, 3, COLOR_ACCENT);
+    HPEN hOldPen = SelectObject(hdc, hAccentPen);
+    MoveToEx(hdc, titleRect.left, titleRect.bottom + 8, NULL);
+    LineTo(hdc, titleRect.left + 200, titleRect.bottom + 8);
+    SelectObject(hdc, hOldPen);
+    DeleteObject(hAccentPen);
     
     if (!networks || networks->count == 0) {
-        HFONT hFont = CreateFontA(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                 DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                                 CLEARTYPE_QUALITY, VARIABLE_PITCH, "Segoe UI");
-        hOldFont = SelectObject(hdc, hFont);
+        SelectObject(hdc, g_cachedFonts[1]); // 16px semibold
+        SetTextColor(hdc, COLOR_TEXT_SECONDARY);
         
-        SetTextColor(hdc, RGB(150, 155, 165));
-        RECT noDataRect = {rect.left + margin, rect.top + titleHeight + 20,
+        RECT noDataRect = {rect.left + margin, rect.top + titleHeight + 40,
                            rect.right - margin, rect.bottom - margin};
-        DrawTextA(hdc, "🔍 No WiFi networks detected\n\nClick 'Refresh Networks' to scan for available networks",
+        DrawTextA(hdc, "🔍 No WiFi networks detected\n\nClick 'Refresh Networks' to discover available networks in your area",
                   -1, &noDataRect, DT_CENTER | DT_VCENTER | DT_WORDBREAK);
         
         SelectObject(hdc, hOldFont);
-        DeleteObject(hFont);
         return;
     }
     
-    RECT chartRect = {rect.left + margin, rect.top + titleHeight + 20,
+    RECT chartRect = {rect.left + margin, rect.top + titleHeight + 30,
                       rect.right - margin, rect.bottom - legendHeight - margin};
     
     int chartWidth = chartRect.right - chartRect.left;
@@ -172,6 +219,7 @@ void DrawSignalGraph(HDC hdc, RECT rect, WiFiNetworkList* networks) {
     int maxNetworks = min(6, networks->count);
     
     if (maxNetworks > 0) {
+        // Modern grid lines
         HPEN hGridPen = CreatePen(PS_DOT, 1, RGB(45, 50, 60));
         hOldPen = SelectObject(hdc, hGridPen);
         
@@ -184,31 +232,26 @@ void DrawSignalGraph(HDC hdc, RECT rect, WiFiNetworkList* networks) {
         SelectObject(hdc, hOldPen);
         DeleteObject(hGridPen);
         
-        HFONT hLabelFont = CreateFontA(11, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                      DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                                      CLEARTYPE_QUALITY, VARIABLE_PITCH, "Segoe UI");
-        hOldFont = SelectObject(hdc, hLabelFont);
-        
-        SetTextColor(hdc, RGB(120, 125, 135));
+        // Enhanced strength labels
+        SelectObject(hdc, g_cachedFonts[2]); // 14px normal
+        SetTextColor(hdc, COLOR_TEXT_SECONDARY);
         
         const char* strengthLabels[] = {"Excellent", "Good", "Fair", "Weak", "Poor"};
         for (int i = 0; i <= 4; i++) {
             int y = chartRect.top + (chartHeight * i) / 5;
-            RECT labelRect = {rect.left + 5, y - 8, chartRect.left - 5, y + 8};
+            RECT labelRect = {rect.left + 5, y - 10, chartRect.left - 10, y + 10};
             DrawTextA(hdc, strengthLabels[i], -1, &labelRect, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
         }
         
-        SelectObject(hdc, hOldFont);
-        DeleteObject(hLabelFont);
-        
-        int barWidth = (chartWidth - (maxNetworks + 1) * 12) / maxNetworks;
-        int maxBarWidth = 65;
+        // Enhanced network bars
+        int barWidth = (chartWidth - (maxNetworks + 1) * 20) / maxNetworks;
+        int maxBarWidth = 80;
         if (barWidth > maxBarWidth) barWidth = maxBarWidth;
         
         for (int i = 0; i < maxNetworks; i++) {
             WiFiNetwork* net = &networks->networks[i];
             
-            int x = chartRect.left + 12 + i * (barWidth + 12);
+            int x = chartRect.left + 20 + i * (barWidth + 20);
             
             int signalPercent = (net->signal_strength + 100) * 100 / 70;
             if (signalPercent < 0) signalPercent = 5;
@@ -222,163 +265,142 @@ void DrawSignalGraph(HDC hdc, RECT rect, WiFiNetworkList* networks) {
             barRect.bottom = chartRect.bottom;
             barRect.top = chartRect.bottom - barHeight;
             
+            // Modern color scheme for signal strength
             COLORREF barColor;
             if (net->is_connected) {
-                barColor = RGB(40, 200, 80);
+                barColor = COLOR_SUCCESS;
             } else if (net->signal_strength > -50) {
-                barColor = RGB(30, 150, 255);
+                barColor = COLOR_ACCENT;
             } else if (net->signal_strength > -65) {
-                barColor = RGB(255, 165, 0);
-            } else if (net->signal_strength > -80) {
-                barColor = RGB(255, 95, 95);
+                barColor = COLOR_WARNING;
             } else {
-                barColor = RGB(180, 60, 60);
+                barColor = COLOR_ERROR;
             }
             
-            HBRUSH hBarBrush = CreateOptimizedGradientBrush(hdc, barRect,
-                                                           BlendColors(barColor, RGB(255, 255, 255), 0.2f),
-                                                          BlendColors(barColor, RGB(0, 0, 0), 0.15f), TRUE);
-            HPEN hBarPen = CreatePen(PS_SOLID, 2, BlendColors(barColor, RGB(0, 0, 0), 0.3f));
+            // Beautiful gradient bars with modern styling
+            HBRUSH hBarBrush = CreateModernGradient(hdc, barRect,
+                                                   BlendColors(barColor, RGB(255, 255, 255), 0.1f),
+                                                   BlendColors(barColor, RGB(0, 0, 0), 0.2f), TRUE);
             
-            if (hBarBrush && hBarPen) {
-                DrawRoundedRect(hdc, barRect, 6, hBarBrush, hBarPen);
-            }
+            // Modern rounded bars
+            HPEN hBarPen = CreatePen(PS_SOLID, 2, BlendColors(barColor, RGB(255, 255, 255), 0.3f));
+            HPEN hOldBarPen = SelectObject(hdc, hBarPen);
+            HBRUSH hOldBarBrush = SelectObject(hdc, hBarBrush);
             
-            if (hBarBrush) DeleteObject(hBarBrush);
-            if (hBarPen) DeleteObject(hBarPen);
+            RoundRect(hdc, barRect.left, barRect.top, barRect.right, barRect.bottom, 12, 12);
             
-            HFONT hNetworkFont = CreateFontA(9, 0, 0, 0, FW_MEDIUM, FALSE, FALSE, FALSE,
-                                           DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                                           CLEARTYPE_QUALITY, VARIABLE_PITCH, "Segoe UI");
-            hOldFont = SelectObject(hdc, hNetworkFont);
+            SelectObject(hdc, hOldBarBrush);
+            SelectObject(hdc, hOldBarPen);
+            DeleteObject(hBarBrush);
+            DeleteObject(hBarPen);
             
-            SetTextColor(hdc, RGB(220, 225, 235));
+            // Enhanced network labels with larger text
+            SelectObject(hdc, g_cachedFonts[2]); // 14px
+            SetTextColor(hdc, COLOR_TEXT_PRIMARY);
             
             char label[32];
             if (strlen(net->ssid) > 0) {
-                strncpy_s(label, sizeof(label), net->ssid, 10);
-                if (strlen(net->ssid) > 10) {
-                    strcpy_s(label + 10, sizeof(label) - 10, "...");
+                strncpy_s(label, sizeof(label), net->ssid, 12);
+                if (strlen(net->ssid) > 12) {
+                    strcpy_s(label + 12, sizeof(label) - 12, "...");
                 }
             } else {
                 strcpy_s(label, sizeof(label), "Hidden");
             }
             
-            RECT nameRect = {x - 8, chartRect.bottom + 8, x + barWidth + 8, chartRect.bottom + 25};
+            RECT nameRect = {x - 15, chartRect.bottom + 15, x + barWidth + 15, chartRect.bottom + 35};
             DrawTextA(hdc, label, -1, &nameRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
             
-            char strengthText[16];
+            // Signal strength text with better visibility
+            char strengthText[32];
             sprintf_s(strengthText, sizeof(strengthText), "%d dBm", net->signal_strength);
             
-            SetTextColor(hdc, RGB(160, 170, 185));
-            RECT strengthRect = {x - 8, chartRect.bottom + 25, x + barWidth + 8, chartRect.bottom + 40};
+            SetTextColor(hdc, COLOR_TEXT_SECONDARY);
+            RECT strengthRect = {x - 15, chartRect.bottom + 35, x + barWidth + 15, chartRect.bottom + 52};
             DrawTextA(hdc, strengthText, -1, &strengthRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
             
+            // Connection indicator
             if (net->is_connected) {
-                SetTextColor(hdc, RGB(255, 255, 255));
-                RECT connRect = {barRect.left + 2, barRect.top + 8, barRect.right - 2, barRect.top + 20};
-                HBRUSH hConnBrush = CreateSolidBrush(RGB(40, 200, 80));
-                FillRect(hdc, &connRect, hConnBrush);
-                DeleteObject(hConnBrush);
-                DrawTextA(hdc, "●", -1, &connRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                SetTextColor(hdc, COLOR_SUCCESS);
+                RECT connRect = {barRect.left, barRect.top - 25, barRect.right, barRect.top - 5};
+                DrawTextA(hdc, "● CONNECTED", -1, &connRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
             }
-            
-            SelectObject(hdc, hOldFont);
-            DeleteObject(hNetworkFont);
         }
         
-        RECT legendRect = {rect.left + margin, rect.bottom - legendHeight,
+        // Enhanced legend with larger text
+        RECT legendRect = {rect.left + margin, rect.bottom - legendHeight + 10,
                            rect.right - margin, rect.bottom - 10};
         
-        HFONT hLegendFont = CreateFontA(10, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                       DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                                       CLEARTYPE_QUALITY, VARIABLE_PITCH, "Segoe UI");
-        hOldFont = SelectObject(hdc, hLegendFont);
+        SelectObject(hdc, g_cachedFonts[2]); // 14px
+        SetTextColor(hdc, COLOR_TEXT_SECONDARY);
         
-        SetTextColor(hdc, RGB(140, 150, 165));
-        
-        char legendText[128];
+        char legendText[256];
         sprintf_s(legendText, sizeof(legendText),
-                  "📶 Displaying top %d networks • Green = Connected • Blue = Excellent • Orange = Good • Red = Weak",
+                  "📶 Showing %d strongest networks  •  🟢 Connected  •  🔵 Excellent  •  🟡 Good  •  🔴 Weak",
                   maxNetworks);
         DrawTextA(hdc, legendText, -1, &legendRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-        
-        SelectObject(hdc, hOldFont);
-        DeleteObject(hLegendFont);
     }
+    
+    SelectObject(hdc, hOldFont);
 }
 
 void DrawModernButton(HDC hdc, RECT rect, const char* text, BOOL pressed, BOOL enabled) {
     if (!hdc || !text) return;
     
-    COLORREF baseColor, shadowColor;
+    InitializeGUICache();
     
+    // Modern button colors
+    COLORREF baseColor;
     if (strstr(text, "🔄") != NULL) {
-        baseColor = enabled ? RGB(45, 125, 70) : RGB(85, 85, 85);
+        baseColor = enabled ? COLOR_SUCCESS : RGB(75, 85, 99);
     } else if (strstr(text, "💾") != NULL) {
-        baseColor = enabled ? RGB(70, 110, 180) : RGB(85, 85, 85);
+        baseColor = enabled ? COLOR_ACCENT : RGB(75, 85, 99);
     } else {
-        baseColor = enabled ? RGB(0, 122, 204) : RGB(85, 85, 85);
+        baseColor = enabled ? COLOR_ACCENT : RGB(75, 85, 99);
     }
     
-    shadowColor = RGB(0, 0, 0);
-    
-    RECT shadowRect = rect;
-    OffsetRect(&shadowRect, 2, 2);
-    
-    HBRUSH hShadowBrush = CreateSolidBrush(shadowColor);
-    if (hShadowBrush) {
-        HRGN hClipRgn = CreateRectRgn(rect.left - 5, rect.top - 5, rect.right + 5, rect.bottom + 5);
-        SelectClipRgn(hdc, hClipRgn);
-        
-        HPEN hShadowPen = CreatePen(PS_SOLID, 1, shadowColor);
-        HPEN hOldPen = SelectObject(hdc, hShadowPen);
-        HBRUSH hOldBrush = SelectObject(hdc, hShadowBrush);
-        
-        RoundRect(hdc, shadowRect.left, shadowRect.top, shadowRect.right, shadowRect.bottom, 12, 12);
-        
-        SelectObject(hdc, hOldBrush);
-        SelectObject(hdc, hOldPen);
-        DeleteObject(hShadowPen);
-        DeleteObject(hShadowBrush);
-        
-        SelectClipRgn(hdc, NULL);
-        DeleteObject(hClipRgn);
-    }
-    
+    // Enhanced button styling
     COLORREF topColor, bottomColor, borderColor, textColor;
     
     if (pressed && enabled) {
-        topColor = BlendColors(baseColor, RGB(0, 0, 0), 0.25f);
+        topColor = BlendColors(baseColor, RGB(0, 0, 0), 0.3f);
         bottomColor = BlendColors(baseColor, RGB(0, 0, 0), 0.1f);
         borderColor = BlendColors(baseColor, RGB(0, 0, 0), 0.4f);
-        OffsetRect(&rect, 1, 1);
+        OffsetRect(&rect, 2, 2);
     } else if (enabled) {
-        topColor = BlendColors(baseColor, RGB(255, 255, 255), 0.15f);
-        bottomColor = BlendColors(baseColor, RGB(0, 0, 0), 0.15f);
-        borderColor = BlendColors(baseColor, RGB(0, 0, 0), 0.25f);
+        topColor = BlendColors(baseColor, RGB(255, 255, 255), 0.2f);
+        bottomColor = BlendColors(baseColor, RGB(0, 0, 0), 0.1f);
+        borderColor = BlendColors(baseColor, RGB(255, 255, 255), 0.3f);
     } else {
-        topColor = bottomColor = baseColor;
-        borderColor = RGB(120, 120, 120);
+        topColor = bottomColor = RGB(75, 85, 99);
+        borderColor = RGB(107, 114, 128);
     }
     
-    textColor = enabled ? RGB(255, 255, 255) : RGB(160, 160, 160);
+    textColor = enabled ? COLOR_TEXT_PRIMARY : RGB(156, 163, 175);
     
-    HBRUSH hBrush = CreateOptimizedGradientBrush(hdc, rect, topColor, bottomColor, TRUE);
-    HPEN hPen = CreatePen(PS_SOLID, 1, borderColor);
+    // Modern gradient button
+    HBRUSH hBrush = CreateModernGradient(hdc, rect, topColor, bottomColor, TRUE);
+    HPEN hPen = CreatePen(PS_SOLID, 2, borderColor);
     
     if (hBrush && hPen) {
-        DrawRoundedRect(hdc, rect, 12, hBrush, hPen);
+        HPEN hOldPen = SelectObject(hdc, hPen);
+        HBRUSH hOldBrush = SelectObject(hdc, hBrush);
         
+        RoundRect(hdc, rect.left, rect.top, rect.right, rect.bottom, 16, 16);
+        
+        SelectObject(hdc, hOldBrush);
+        SelectObject(hdc, hOldPen);
+        
+        // Subtle inner highlight
         if (enabled && !pressed) {
-            RECT glowRect = {rect.left + 2, rect.top + 2, rect.right - 2, rect.top + 4};
-            HBRUSH hGlowBrush = CreateSolidBrush(BlendColors(topColor, RGB(255, 255, 255), 0.6f));
+            RECT glowRect = {rect.left + 3, rect.top + 3, rect.right - 3, rect.top + 8};
+            HBRUSH hGlowBrush = CreateSolidBrush(BlendColors(topColor, RGB(255, 255, 255), 0.4f));
             if (hGlowBrush) {
-                HPEN hGlowPen = CreatePen(PS_SOLID, 1, BlendColors(topColor, RGB(255, 255, 255), 0.6f));
+                HPEN hGlowPen = CreatePen(PS_SOLID, 1, BlendColors(topColor, RGB(255, 255, 255), 0.4f));
                 HPEN hOldGlowPen = SelectObject(hdc, hGlowPen);
                 HBRUSH hOldGlowBrush = SelectObject(hdc, hGlowBrush);
                 
-                RoundRect(hdc, glowRect.left, glowRect.top, glowRect.right, glowRect.bottom, 8, 8);
+                RoundRect(hdc, glowRect.left, glowRect.top, glowRect.right, glowRect.bottom, 12, 12);
                 
                 SelectObject(hdc, hOldGlowBrush);
                 SelectObject(hdc, hOldGlowPen);
@@ -391,33 +413,32 @@ void DrawModernButton(HDC hdc, RECT rect, const char* text, BOOL pressed, BOOL e
     if (hBrush) DeleteObject(hBrush);
     if (hPen) DeleteObject(hPen);
     
+    // Enhanced button text
     SetTextColor(hdc, textColor);
     SetBkMode(hdc, TRANSPARENT);
     
-    HFONT hFont = CreateFontA(13, 0, 0, 0, FW_MEDIUM, FALSE, FALSE, FALSE,
-                             DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                             CLEARTYPE_QUALITY, VARIABLE_PITCH, "Segoe UI");
-    if (hFont) {
-        HFONT hOldFont = SelectObject(hdc, hFont);
-        
-        RECT textRect = rect;
-        InflateRect(&textRect, -8, -2);
-        
-        DrawTextA(hdc, text, -1, &textRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-        
-        SelectObject(hdc, hOldFont);
-        DeleteObject(hFont);
-    }
+    HFONT hOldFont = SelectObject(hdc, g_cachedFonts[4]); // 18px medium
+    
+    RECT textRect = rect;
+    InflateRect(&textRect, -12, -4);
+    
+    DrawTextA(hdc, text, -1, &textRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    
+    SelectObject(hdc, hOldFont);
 }
 
 void ApplyModernStyling(HWND hwnd) {
+    InitializeGUICache();
+    
+    // Modern window styling
     SetWindowLong(hwnd, GWL_EXSTYLE, GetWindowLong(hwnd, GWL_EXSTYLE) | WS_EX_LAYERED);
-    SetLayeredWindowAttributes(hwnd, 0, 250, LWA_ALPHA);
+    SetLayeredWindowAttributes(hwnd, 0, 245, LWA_ALPHA);
     
     RECT rect;
     GetWindowRect(hwnd, &rect);
     
-    HRGN hRgn = CreateRoundRectRgn(0, 0, rect.right - rect.left, rect.bottom - rect.top, 20, 20);
+    // Modern rounded corners
+    HRGN hRgn = CreateRoundRectRgn(0, 0, rect.right - rect.left, rect.bottom - rect.top, 24, 24);
     SetWindowRgn(hwnd, hRgn, TRUE);
     
     HDC hdc = GetDC(hwnd);
@@ -425,36 +446,34 @@ void ApplyModernStyling(HWND hwnd) {
         RECT clientRect;
         GetClientRect(hwnd, &clientRect);
         
-        HBRUSH hHeaderBrush = CreateOptimizedGradientBrush(hdc, clientRect, RGB(40, 40, 40), RGB(20, 20, 20), TRUE);
+        // Beautiful header gradient
+        HBRUSH hHeaderBrush = CreateModernGradient(hdc, clientRect, 
+                                                  RGB(37, 99, 235), RGB(29, 78, 216), FALSE);
         
-        RECT headerRect = {0, 0, clientRect.right, 50};
+        RECT headerRect = {0, 0, clientRect.right, 70};
         FillRect(hdc, &headerRect, hHeaderBrush);
-        
         DeleteObject(hHeaderBrush);
         
-        SetTextColor(hdc, RGB(255, 255, 255));
+        // Enhanced title
+        SetTextColor(hdc, COLOR_TEXT_PRIMARY);
         SetBkMode(hdc, TRANSPARENT);
         
-        HFONT hTitleFont = CreateFontA(20, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                                      DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                                      CLEARTYPE_QUALITY, VARIABLE_PITCH, "Segoe UI");
-        HFONT hOldFont = SelectObject(hdc, hTitleFont);
+        HFONT hOldFont = SelectObject(hdc, g_cachedFonts[0]); // 24px bold
         
-        RECT titleRect = {20, 10, clientRect.right - 20, 40};
-        DrawTextA(hdc, "Professional WiFi Scanner", -1, &titleRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        RECT titleRect = {30, 20, clientRect.right - 30, 50};
+        DrawTextA(hdc, "🌐 Professional WiFi Scanner", -1, &titleRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
         
-        HPEN hAccentPen = CreatePen(PS_SOLID, 3, RGB(0, 120, 215));
+        // Modern accent elements
+        HPEN hAccentPen = CreatePen(PS_SOLID, 4, RGB(139, 200, 255));
         HPEN hOldPen = SelectObject(hdc, hAccentPen);
         
-        MoveToEx(hdc, 20, 45, NULL);
-        LineTo(hdc, clientRect.right - 20, 45);
+        MoveToEx(hdc, 30, 60, NULL);
+        LineTo(hdc, clientRect.right - 30, 60);
         
         SelectObject(hdc, hOldPen);
         DeleteObject(hAccentPen);
         
         SelectObject(hdc, hOldFont);
-        DeleteObject(hTitleFont);
-        
         ReleaseDC(hwnd, hdc);
     }
 } 

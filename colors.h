@@ -1,0 +1,15 @@
+#ifndef COLORS_H
+#define COLORS_H
+
+// Modern color scheme
+#define APP_COLOR_BACKGROUND RGB(15, 17, 22)
+#define COLOR_PANEL RGB(22, 25, 31)
+#define COLOR_ACCENT RGB(88, 166, 255)
+#define COLOR_SUCCESS RGB(76, 217, 100)
+#define COLOR_WARNING RGB(255, 204, 68)
+#define COLOR_ERROR RGB(255, 105, 97)
+#define COLOR_TEXT_PRIMARY RGB(255, 255, 255)
+#define COLOR_TEXT_SECONDARY RGB(156, 163, 175)
+#define COLOR_BORDER RGB(55, 65, 81)
+
+#endif // COLORS_H 
